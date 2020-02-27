@@ -1,0 +1,1658 @@
+Function IsInArray(valToBeFound As Variant, arr As Variant) As Boolean
+Dim element As Variant
+On Error GoTo error1:
+For Each element In arr
+    If element = valToBeFound Then
+        IsInArray = True
+        Exit Function
+    End If
+Next element
+Exit Function
+error1:
+IsInArray = False
+End Function
+
+'Agrega producto a la listbox
+Sub agregar_producto()
+    largo = UserForm2.multLargo.Value
+    ancho = UserForm2.multAncho.Value
+    alto = UserForm2.multAlto.Value
+    peso = UserForm2.multPeso.Value
+    unidades = UserForm2.multUnidades.Value
+    categoria = UserForm2.multCategoria.Value
+    descripcion = UserForm2.multDescripcion.Value
+    origen = UserForm2.multOrigen.Value
+    precio = UserForm2.multPrecio.Value
+    
+    If UserForm2.multCheck.Value Then
+        check = "True"
+    Else
+        check = "False"
+    End If
+    
+    junto = largo & "$" & ancho & "$" & alto & "$" & peso & "$" & unidades & "$" & categoria & "$" & descripcion & "$" & origen & "$" & precio & "$" & check
+    UserForm2.listProductos.AddItem junto
+End Sub
+
+'Quita el producto de la listbox
+Sub quitar_producto()
+    For i = 0 To UserForm2.listProductos.ListCount - 1
+        If UserForm2.listProductos.Selected(i) = True Then
+            UserForm2.listProductos.RemoveItem (i)
+        End If
+    Next i
+End Sub
+
+'Extrae todos los datos de la listbox(consolida los datos)
+Function procesar_datos() As Variant
+    Dim array_final() As Variant
+    ReDim array_final(0)
+    working_string_publica = ""
+    For i = 0 To UserForm2.listProductos.ListCount - 1
+        ReDim Preserve array_final(i)
+        array_final(i) = extraer_datos(UserForm2.listProductos.List(i))
+    Next i
+    procesar_datos = array_final
+End Function
+
+
+'Extrae todos los datos de la listbox(helper function)
+Function extraer_datos(datos As String) As Variant
+    Dim array_datos(9) As Variant
+    working_string = datos
+    For i = 1 To 9
+        pos_dolar = InStr(1, working_string, "$")
+        info = Left(working_string, pos_dolar - 1)
+        array_datos(i - 1) = info
+        working_string = Right(working_string, Len(working_string) - pos_dolar)
+        If i = 9 Then
+            array_datos(9) = working_string
+        End If
+    Next i
+    extraer_datos = array_datos
+End Function
+
+
+'Calcular volumen y peso total
+Sub dimensiones()
+    productos = procesar_datos()
+    volumen_total = 0
+    peso = 0
+    peso_volumetrico = 0
+    On Error GoTo exitsub
+    
+    For i = 0 To UBound(productos)
+        If UserForm2.CheckBox7.Value = True Then
+            volumen_total = volumen_total + (productos(i)(0) / 12) * (productos(i)(1) / 12) * (productos(i)(2) / 12) * productos(i)(4)
+        Else
+            volumen_total = volumen_total + productos(i)(0) * productos(i)(1) * productos(i)(2) * productos(i)(4)
+        End If
+        peso = peso + productos(i)(3) * productos(i)(4)
+    Next i
+    
+    peso_volumetrico = volumen / 166
+    
+exitsub:
+    UserForm2.volumentotal.Text = Round(volumen_total, 2)
+    UserForm2.pesototal.Text = Round(peso, 2)
+    UserForm2.libravolumetrica.Text = Round(peso_volumetrico, 2)
+End Sub
+
+
+Sub calcular()
+    Dim oldwb As Workbook
+    Set oldwb = ActiveWorkbook
+    Dim newwb As Workbook
+    If UserForm2.CheckBox8.Value = True Then
+    
+        Set newwb = Workbooks.Add
+        oldwb.Activate
+        sheet_number = 1
+    
+    End If
+    
+    Dim forms As formulario
+    Dim resultados As Range
+    
+    For i = 0 To UserForm2.listProductos.ListCount - 1
+        If working_string_publica = "" Then
+            working_string_publica = UserForm2.listProductos.List(i)
+        Else
+            working_string_publica = working_string_publica & "\" & UserForm2.listProductos.List(i)
+        End If
+    Next i
+    
+    
+    Set forms = New formulario
+    Set resultados = Range("RESULTADOS")
+    
+    'Extrae los valores del formulario
+    forms.getvalues
+    
+    'Extrae los valores de la listbox con los productos y los asigna a una variable
+    array_productos = procesar_datos
+    
+    
+    'Itera por cada uno de los productos y calcula lo necesario
+    'Guarda en un array de arrays informacion de todos los productos
+    counter = 0
+    ReDim aranceles_producto(0)
+    ReDim info_producto(8)
+    ReDim posibles_tratados(0)
+    volumen_total = 0
+    peso_total = 0
+    venta_total = 0
+    
+    
+    rowactual = 14
+    counter2 = 0
+    For i = 0 To UBound(array_productos)
+        If UserForm2.CheckBox7.Value = True Then
+            volumen_total = volumen_total + (array_productos(i)(0) / 12) * (array_productos(i)(1) / 12) * (array_productos(i)(2) / 12) * array_productos(i)(4)
+        Else
+            volumen_total = volumen_total + array_productos(i)(0) * array_productos(i)(1) * array_productos(i)(2) * array_productos(i)(4)
+        End If
+        
+        peso_total = peso_total + array_productos(i)(3) * array_productos(i)(4)
+        venta_total = venta_total + array_productos(i)(8)
+        
+        'Determina si el producto es aplicable para algun TLC
+        counter = 0
+        posibles_tratados(0) = "ND"
+        For j = 1 To Range("TRATADOS").Columns.Count
+            For t = 1 To Range("TRATADOS").Rows.Count
+                If array_productos(i)(9) = True Then
+                    If array_productos(i)(7) = Range("TRATADOS").Cells(t, j).Value Then
+                        ReDim Preserve posibles_tratados(counter)
+                        posibles_tratados(counter) = j
+                        counter = counter + 1
+                    End If
+                Else
+                    If array_productos(i)(7) = Range("TRATADOS").Cells(t, j).Value And _
+                    InStr(1, forms.salida, array_productos(i)(7), vbTextCompare) <> 0 Then
+                        ReDim Preserve posibles_tratados(counter)
+                        posibles_tratados(counter) = j
+                        counter = counter + 1
+                    End If
+                End If
+            Next t
+        Next j
+    
+        
+        info_producto(7) = posibles_tratados
+        
+        
+        
+        For j = 1 To Range("RESUM_PRODUCTOS").Rows.Count
+            With Range("RESUM_PRODUCTOS")
+                If .Cells(j, 2) = array_productos(i)(5) And .Cells(j, 3) = array_productos(i)(6) Then
+                    ReDim Preserve aranceles_producto(counter2)
+                    info_producto(0) = j 'row producto
+                    info_producto(1) = .Cells(j, 1) 'partida arancelaria
+                    info_producto(2) = .Cells(j, 2) 'categoria
+                    info_producto(3) = .Cells(j, 3) 'descripcion
+                    info_producto(4) = .Cells(j, 4) 'DAI
+                    info_producto(5) = .Cells(j, 5) 'selectivo
+                    info_producto(6) = .Cells(j, 6) 'ISV
+                    info_producto(8) = .Cells(j, 4) 'DAI de tratado. Inicialmente es igual al DAI
+                    
+                    For t = 0 To UBound(posibles_tratados)
+                        If info_producto(4) <> 0 Then
+                            If info_producto(7)(0) <> "ND" Then
+                                If .Cells(j, info_producto(7)(t) + 6) < info_producto(4) Then
+                                    info_producto(8) = .Cells(j, info_producto(7)(t) + 6)
+                                End If
+                            End If
+                        End If
+                    Next t
+                    
+                    If UserForm2.CheckBox8.Value = True Then
+                    With newwb.Sheets(1)
+                    
+                        If UserForm2.CheckBox7.Value = True Then
+                            .Cells(rowactual, 5) = array_productos(i)(0) / 12
+                            .Cells(rowactual, 6) = array_productos(i)(1) / 12
+                            .Cells(rowactual, 7) = array_productos(i)(2) / 12
+                        Else
+                            .Cells(rowactual, 5) = array_productos(i)(0)
+                            .Cells(rowactual, 6) = array_productos(i)(1)
+                            .Cells(rowactual, 7) = array_productos(i)(2)
+                        End If
+                        
+                        
+                        .Cells(rowactual, 1) = info_producto(1)
+                        .Cells(rowactual, 2) = array_productos(i)(5)
+                        .Cells(rowactual, 3) = array_productos(i)(6)
+                        .Cells(rowactual, 4) = array_productos(i)(7)
+                        .Cells(rowactual, 8) = array_productos(i)(3)
+                        .Cells(rowactual, 9) = array_productos(i)(4)
+                        .Cells(rowactual, 10).Formula = "=" & .Cells(rowactual, 5).Address(False, False) & "*" & .Cells(rowactual, 6).Address(False, False) & "*" & .Cells(rowactual, 7).Address(False, False) & "*" & .Cells(rowactual, 9).Address(False, False)
+                        .Cells(rowactual, 11).Formula = "=" & .Cells(rowactual, 8).Address(False, False) & "*" & .Cells(rowactual, 9).Address(False, False)
+                        .Cells(rowactual, 12) = array_productos(i)(8)
+                        .Cells(rowactual, 13) = info_producto(8)
+                        .Cells(rowactual, 14) = info_producto(5)
+                        .Cells(rowactual, 15) = info_producto(6)
+                    
+                    End With
+                    End If
+                    rowactual = rowactual + 1
+                    aranceles_producto(counter2) = info_producto
+                    counter2 = counter2 + 1
+                End If
+            End With
+        Next j
+    Next i
+    
+    rowstart1 = 12
+    rowfinal1 = rowactual
+    
+    rowtotales1 = rowactual
+    
+    If UserForm2.CheckBox8.Value = True Then
+    With newwb.Sheets(1)
+        .Cells(rowactual, 12).Formula = "=sum(" & .Cells(14, 12).Address(False, False) & ":" & .Cells(rowactual - 1, 12).Address(False, False) & ")"
+        .Cells(rowactual, 11).Formula = "=sum(" & .Cells(14, 11).Address(False, False) & ":" & .Cells(rowactual - 1, 11).Address(False, False) & ")"
+        .Cells(rowactual, 10).Formula = "=sum(" & .Cells(14, 10).Address(False, False) & ":" & .Cells(rowactual - 1, 10).Address(False, False) & ")"
+        .Cells(13, 1).Value = "Partida"
+        .Cells(13, 2).Value = "Categoria"
+        .Cells(13, 3).Value = "Descripcion"
+        .Cells(13, 4).Value = "Origen"
+        .Cells(13, 5).Value = "Largo (ft)"
+        .Cells(13, 6).Value = "Ancho (ft)"
+        .Cells(13, 7).Value = "Altura (ft)"
+        .Cells(13, 8).Value = "Peso"
+        .Cells(13, 9).Value = "Unidades"
+        .Cells(13, 10).Value = "Volumen total (ft^3)"
+        .Cells(13, 11).Value = "Peso total (lb)"
+        .Cells(13, 12).Value = "Precio compra ($)"
+        .Cells(13, 13).Value = "DAI (%)"
+        .Cells(13, 14).Value = "Selectivo (%)"
+        .Cells(13, 15).Value = "ISV (%)"
+        .Cells(12, 1).Value = "Informacion del producto"
+    End With
+    End If
+    rowactual = rowactual + 3
+    
+    
+    
+    
+    'Determina la ultima fila utilizada
+    For i = 1 To resultados.Rows.Count
+        If IsEmpty(resultados.Cells(i, 1)) Then
+            lastabsoluterow = resultados.Cells(i, 1).Row
+            lastrangerow = i
+            Exit For
+        Else
+            lastabsoluterow = resultados.Cells(i, 1).Row
+            lastrangerow = i
+        End If
+    Next i
+    
+    
+    'Calcula el transporte terreste interno
+    'Asume que es 0 inicialmente
+    trans_interno = 0
+    trans_externo = 0
+    For j = 1 To Range("TARIFA_TERRESTRE").Rows.Count
+        If Range("TARIFA_TERRESTRE").Cells(j, 4).Value = forms.tipo1 And Range("TARIFA_TERRESTRE").Cells(j, 1).Value = forms.proveedorvehiculos1 Then
+            tarifa1 = Range("TARIFA_TERRESTRE").Cells(j, 5).Value
+            unidad1 = Range("TARIFA_TERRESTRE").Cells(j, 6).Value
+            trans_externo = trans_externo + tarifa1 * forms.numerode1
+            GoTo nextloop
+        End If
+
+        If Range("TARIFA_TERRESTRE").Cells(j, 4).Value = forms.tipo2 And Range("TARIFA_TERRESTRE").Cells(j, 1).Value = forms.proveedorvehiculos2 Then
+            tarifa2 = Range("TARIFA_TERRESTRE").Cells(j, 5).Value
+            unidad2 = Range("TARIFA_TERRESTRE").Cells(j, 6).Value
+            trans_externo = trans_externo + tarifa2 * forms.numerode2
+            GoTo nextloop
+        End If
+
+        If Range("TARIFA_TERRESTRE").Cells(j, 4).Value = forms.tipo3 And Range("TARIFA_TERRESTRE").Cells(j, 1).Value = forms.proveedorvehiculos3 Then
+            tarifa3 = Range("TARIFA_TERRESTRE").Cells(j, 5).Value
+            unidad3 = Range("TARIFA_TERRESTRE").Cells(j, 6).Value
+            trans_externo = trans_externo + tarifa3 * forms.numerode3
+            GoTo nextloop
+        End If
+
+        If Range("TARIFA_TERRESTRE").Cells(j, 4).Value = forms.tipo4 And Range("TARIFA_TERRESTRE").Cells(j, 1).Value = forms.proveedorvehiculos4 Then
+            tarifa4 = Range("TARIFA_TERRESTRE").Cells(j, 5).Value
+            unidad4 = Range("TARIFA_TERRESTRE").Cells(j, 6).Value
+            trans_externo = trans_externo + tarifa4 * forms.numerode4
+        End If
+nextloop:
+    Next j
+    If UserForm2.CheckBox8.Value = True Then
+    With newwb.Sheets(1)
+        .Cells(rowactual, 1).Value = "Transporte terrestre en el extranjero"
+        .Cells(rowactual + 1, 1).Value = "Proveedor"
+        .Cells(rowactual + 1, 2).Value = "Tipo vehiculo"
+        .Cells(rowactual + 1, 3).Value = "Costo"
+        .Cells(rowactual + 1, 5).Value = "Cantidad"
+        .Cells(rowactual + 1, 6).Value = "Total"
+        
+        .Cells(rowactual + 2, 1).Value = forms.proveedorvehiculos1
+        .Cells(rowactual + 3, 1).Value = forms.proveedorvehiculos2
+        .Cells(rowactual + 4, 1).Value = forms.proveedorvehiculos3
+        .Cells(rowactual + 5, 1).Value = forms.proveedorvehiculos4
+        
+        .Cells(rowactual + 2, 2).Value = forms.tipo1
+        .Cells(rowactual + 3, 2).Value = forms.tipo2
+        .Cells(rowactual + 4, 2).Value = forms.tipo3
+        .Cells(rowactual + 5, 2).Value = forms.tipo4
+        
+        .Cells(rowactual + 2, 3).Value = tarifa1
+        .Cells(rowactual + 3, 3).Value = tarifa2
+        .Cells(rowactual + 4, 3).Value = tarifa3
+        .Cells(rowactual + 5, 3).Value = tarifa4
+        
+        .Cells(rowactual + 2, 4).Value = unidad1
+        .Cells(rowactual + 3, 4).Value = unidad2
+        .Cells(rowactual + 4, 4).Value = unidad3
+        .Cells(rowactual + 5, 4).Value = unidad4
+        
+        .Cells(rowactual + 2, 5).Value = forms.numerode1
+        .Cells(rowactual + 3, 5).Value = forms.numerode2
+        .Cells(rowactual + 4, 5).Value = forms.numerode3
+        .Cells(rowactual + 5, 5).Value = forms.numerode4
+    
+        .Cells(rowactual + 2, 6).Formula = "=" & .Cells(rowactual + 2, 3).Address(False, False) & "*" & .Cells(rowactual + 2, 5).Address(False, False)
+        .Cells(rowactual + 3, 6).Formula = "=" & .Cells(rowactual + 3, 3).Address(False, False) & "*" & .Cells(rowactual + 3, 5).Address(False, False)
+        .Cells(rowactual + 4, 6).Formula = "=" & .Cells(rowactual + 4, 3).Address(False, False) & "*" & .Cells(rowactual + 4, 5).Address(False, False)
+        .Cells(rowactual + 5, 6).Formula = "=" & .Cells(rowactual + 5, 3).Address(False, False) & "*" & .Cells(rowactual + 5, 5).Address(False, False)
+        .Cells(rowactual + 6, 6).Formula = "=SUM(" & .Cells(rowactual + 2, 6).Address(False, False) & ":" & .Cells(rowactual + 5, 6).Address(False, False) & ")"
+    End With
+    End If
+    
+    rowstart2 = rowactual
+    rowfinal2 = rowactual + 6
+    
+    rowtotales2 = rowactual + 6
+    rowactual = rowactual + 8
+    
+    For j = 1 To Range("TARIFA_TERRESTRE").Rows.Count
+        If Range("TARIFA_TERRESTRE").Cells(j, 4).Value = forms.tipo11 And Range("TARIFA_TERRESTRE").Cells(j, 1).Value = forms.proveedorvehiculos11 Then
+            tarifa1 = Range("TARIFA_TERRESTRE").Cells(j, 5).Value
+            unidad1 = Range("TARIFA_TERRESTRE").Cells(j, 6).Value
+            trans_interno = trans_interno + tarifa1 * forms.numerode11
+            GoTo nextloop2
+        End If
+
+        If Range("TARIFA_TERRESTRE").Cells(j, 4).Value = forms.tipo22 And Range("TARIFA_TERRESTRE").Cells(j, 1).Value = forms.proveedorvehiculos22 Then
+            tarifa2 = Range("TARIFA_TERRESTRE").Cells(j, 5).Value
+            unidad2 = Range("TARIFA_TERRESTRE").Cells(j, 6).Value
+            trans_interno = trans_interno + tarifa2 * forms.numerode22
+            GoTo nextloop2
+        End If
+
+        If Range("TARIFA_TERRESTRE").Cells(j, 4).Value = forms.tipo33 And Range("TARIFA_TERRESTRE").Cells(j, 1).Value = forms.proveedorvehiculos33 Then
+            tarifa3 = Range("TARIFA_TERRESTRE").Cells(j, 5).Value
+            unidad3 = Range("TARIFA_TERRESTRE").Cells(j, 6).Value
+            trans_interno = trans_interno + tarifa3 * forms.numerode33
+            GoTo nextloop2
+        End If
+
+        If Range("TARIFA_TERRESTRE").Cells(j, 4).Value = forms.tipo44 And Range("TARIFA_TERRESTRE").Cells(j, 1).Value = forms.proveedorvehiculos44 Then
+            tarifa4 = Range("TARIFA_TERRESTRE").Cells(j, 5).Value
+            unidad4 = Range("TARIFA_TERRESTRE").Cells(j, 6).Value
+            trans_interno = trans_interno + tarifa4 * forms.numerode44
+        End If
+nextloop2:
+    Next j
+    If UserForm2.CheckBox8.Value = True Then
+    With newwb.Sheets(1)
+        .Cells(rowactual, 1).Value = "Transporte terrestre nacional"
+        .Cells(rowactual + 1, 1).Value = "Proveedor"
+        .Cells(rowactual + 1, 2).Value = "Tipo vehiculo"
+        .Cells(rowactual + 1, 3).Value = "Costo"
+        .Cells(rowactual + 1, 5).Value = "Cantidad"
+        .Cells(rowactual + 1, 6).Value = "Total"
+    
+        .Cells(rowactual + 2, 1).Value = forms.proveedorvehiculos11
+        .Cells(rowactual + 3, 1).Value = forms.proveedorvehiculos22
+        .Cells(rowactual + 4, 1).Value = forms.proveedorvehiculos33
+        .Cells(rowactual + 5, 1).Value = forms.proveedorvehiculos44
+    
+        .Cells(rowactual + 2, 2).Value = forms.tipo11
+        .Cells(rowactual + 3, 2).Value = forms.tipo22
+        .Cells(rowactual + 4, 2).Value = forms.tipo33
+        .Cells(rowactual + 5, 2).Value = forms.tipo44
+    
+        .Cells(rowactual + 2, 3).Value = tarifa1
+        .Cells(rowactual + 3, 3).Value = tarifa2
+        .Cells(rowactual + 4, 3).Value = tarifa3
+        .Cells(rowactual + 5, 3).Value = tarifa4
+    
+        .Cells(rowactual + 2, 4).Value = unidad11
+        .Cells(rowactual + 3, 4).Value = unidad22
+        .Cells(rowactual + 4, 4).Value = unidad33
+        .Cells(rowactual + 5, 4).Value = unidad44
+    
+        .Cells(rowactual + 2, 5).Value = forms.numerode11
+        .Cells(rowactual + 3, 5).Value = forms.numerode22
+        .Cells(rowactual + 4, 5).Value = forms.numerode33
+        .Cells(rowactual + 5, 5).Value = forms.numerode44
+    
+        .Cells(rowactual + 2, 6).Formula = "=" & .Cells(rowactual + 2, 3).Address(False, False) & "*" & .Cells(rowactual + 2, 5).Address(False, False)
+        .Cells(rowactual + 3, 6).Formula = "=" & .Cells(rowactual + 3, 3).Address(False, False) & "*" & .Cells(rowactual + 3, 5).Address(False, False)
+        .Cells(rowactual + 4, 6).Formula = "=" & .Cells(rowactual + 4, 3).Address(False, False) & "*" & .Cells(rowactual + 4, 5).Address(False, False)
+        .Cells(rowactual + 5, 6).Formula = "=" & .Cells(rowactual + 5, 3).Address(False, False) & "*" & .Cells(rowactual + 5, 5).Address(False, False)
+        .Cells(rowactual + 6, 6).Formula = "=SUM(" & .Cells(rowactual + 2, 6).Address(False, False) & ":" & .Cells(rowactual + 5, 6).Address(False, False) & ")"
+    End With
+    
+    rowstart3 = rowactual
+    rowfinal3 = rowactual + 6
+    
+    rowtotales3 = rowactual + 6
+    rowactual = rowactual + 8
+    rowfija = rowactual
+    With newwb.Sheets(1)
+        .Range("A1:O" & CStr(rowfija)).Copy
+    End With
+    
+    End If
+    
+    'Se cambia la longitud del range en base a cuantas rows tiene la tabla de contenedores _
+    y llena los volumenes y nombres de todos los contenedores
+    ReDim nombrescont(Range("CONTENEDORES").Rows.Count - 1)
+    ReDim volumenescont(Range("CONTENEDORES").Rows.Count - 1)
+    For j = 0 To Range("CONTENEDORES").Rows.Count - 1
+        nombrescont(j) = Range("CONTENEDORES").Cells(j + 1, 1).Value
+        volumenescont(j) = Range("CONTENEDORES").Cells(j + 1, 7).Value
+    Next j
+    
+    If UserForm2.CheckBox7.Value = True Then
+        units = "Inches"
+    Else
+        units = "Feet"
+    End If
+    
+    
+    'PARA FCL--------------------------------------------------------------------------------------
+    fob = trans_externo + venta_total
+    promedio_facturas = venta_total / forms.cantfacturas
+    
+    If forms.fcl = True Then
+        For i = 0 To UBound(forms.proveedoresfcl)
+            For y = 0 To UBound(forms.aduaneros)
+                oldwb.Activate
+                'Itera por todas las rows de las tarifas fcl y determina que row leer
+                For j = 1 To Range("TARIFAS_FCL").Rows.Count
+                    oldwb.Activate
+                    If Range("TARIFAS_FCL").Cells(j, 1).Value = forms.proveedoresfcl(i) And _
+                    Range("TARIFAS_FCL").Cells(j, 3).Value = forms.salida And _
+                    Range("TARIFAS_FCL").Cells(j, 4).Value = forms.destino Then
+                        With Range("TARIFAS_FCL")
+                            contenedor = .Cells(j, 5)
+                            tarifa = .Cells(j, 6)
+                            cargada = .Cells(j, 7)
+                            manejo = .Cells(j, 8)
+                            thc = .Cells(j, 9)
+                            sed = .Cells(j, 10)
+                            porcentaje_seguro = .Cells(j, 11)
+                            seguro_minimo = .Cells(j, 12)
+                            sobre_estadia = .Cells(j, 17)
+                            dias_libres = .Cells(j, 19)
+                            dias_salida = .Cells(j, 22)
+                            tiempo_transito = .Cells(j, 23)
+                            promedio_facturas = venta_total / forms.cantfacturas
+                            If UserForm2.CheckBox8.Value = True Then
+                            If sheet_number <> 1 Then
+                                newwb.Sheets.Add after:=newwb.Sheets(newwb.Sheets.Count)
+                            End If
+                            newwb.Activate
+                            newwb.Worksheets(1).Range("A1:O" & CStr(rowfija)).Copy
+                            newwb.Worksheets(sheet_number).Paste
+                            oldwb.Activate
+                            End If
+                            If porcentaje_seguro / 100 * fob > seguro_minimo Then
+                                seguro = porcentaje_seguro / 100 * fob
+                            Else
+                                seguro = seguro_minimo
+                            End If
+                            
+                        
+                            
+                            If promedio_facturas >= 2500 Then
+                                sed = .Cells(j, 10) * forms.cantfacturas
+                            Else
+                                sed = 0
+                            End If
+                            
+                            If forms.diaspuerto + tiempo_transito > dias_libres Then
+                                sobrestadia = ((forms.diaspuerto + tiempo_transito) - dias_libres) * sobre_estadia
+                            Else
+                                sobrestadia = 0
+                            End If
+                            
+                            For u = 1 To Range("CONTENEDORES").Rows.Count
+                                With Range("CONTENEDORES")
+                                    If .Cells(u, 1) = contenedor Then
+                                        cant1 = Application.WorksheetFunction.RoundUp(volumen_total / .Cells(u, 7), 0)
+                                        cant2 = Application.WorksheetFunction.RoundUp(peso_total / .Cells(u, 3), 0)
+                                        Exit For
+                                    End If
+                                End With
+                            Next u
+                            
+                            If cant1 > cant2 Then
+                                cantidad_contenedores = cant1
+                            Else
+                                cantidad_contenedores = cant2
+                            End If
+                            
+                            flete = (tarifa + cargada + manejo + thc + sed + sobrestadia) * cantidad_contenedores + seguro
+                            'Determina el valor fob, qe es el precio de compra + flete externo si es que hay.
+                            'Determina el flete internacional que es el flete x numero de contenedores _
+                            + el seguro de toda la carga que se paga en base al fob.
+                            'El cif es el flete + seguro + fob
+                            'El flete total es la suma de los tres tipos de flete
+                            'Determina el impuesto pagado en dolares
+                            
+                            cif = fob + flete + forms.costonoclasificados
+                            
+                            'Determina lo gastado en aduaneros
+                            For o = 1 To Range("TARIFAS_ADUANEROS").Rows.Count
+                                With Range("TARIFAS_ADUANEROS")
+                                    aduaneroactual = .Cells(o, 1) & " - " & .Cells(o, 3)
+                                    If aduaneroactual = forms.aduaneros(y) Then
+                                        tarifa_tramite = .Cells(o, 4)
+                                        porcentaje_cif = .Cells(o, 5)
+                                        dua = .Cells(o, 6)
+                                        dva = .Cells(o, 7)
+                                        std = .Cells(o, 8)
+                                        aduanatotal = .Cells(o, 4) + (.Cells(o, 5) / 100 * cif) + .Cells(o, 6) + (.Cells(o, 7) * forms.cantfacturas) + .Cells(o, 8)
+                                        Exit For
+                                    End If
+                                End With
+                            Next o
+                            
+                            'Determina los impuestos que se tienen que pagar
+                            impuesto_total = 0
+                            dai_total = 0
+                            selectivo_total = 0
+                            isv_total = 0
+                            gastos_previos = cif - venta_total
+                            
+                            rowstart4 = rowfija
+                            rowfinal4 = rowfija + 6
+                            
+                            If UserForm2.CheckBox8.Value = True Then
+                            With newwb.Sheets(sheet_number)
+                                .Cells(rowfija, 1).Value = "Transporte internacional"
+                                .Cells(rowfija + 1, 1).Value = "Proveedor"
+                                .Cells(rowfija + 2, 1).Value = "Salida"
+                                .Cells(rowfija + 3, 1).Value = "Destino"
+                                .Cells(rowfija + 4, 1).Value = "Tipo transito"
+                                .Cells(rowfija + 5, 1).Value = "Tiempo transito"
+                                .Cells(rowfija + 6, 1).Value = "Cantidad contenedores"
+                                
+                                .Cells(rowfija + 1, 2).Value = forms.proveedoresfcl(i)
+                                .Cells(rowfija + 2, 2).Value = forms.salida
+                                .Cells(rowfija + 3, 2).Value = forms.destino
+                                .Cells(rowfija + 4, 2).Value = "FCL"
+                                .Cells(rowfija + 5, 2).Value = tiempo_transito
+                                .Cells(rowfija + 6, 2).Value = cantidad_contenedores
+                                
+                                .Cells(rowfija + 1, 3).Value = "Tarifa flat ($)"
+                                .Cells(rowfija + 2, 3).Value = "Tipo contenedor"
+                                .Cells(rowfija + 3, 3).Value = "Tarifa volumen ($)"
+                                .Cells(rowfija + 4, 3).Value = "BL + manejo ($)"
+                                .Cells(rowfija + 5, 3).Value = "Cargada ($)"
+                                .Cells(rowfija + 6, 3).Value = "THC ($)"
+                                
+                                .Cells(rowfija + 1, 4).Value = tarifa
+                                .Cells(rowfija + 2, 4).Value = contenedor
+                                .Cells(rowfija + 3, 4).Value = 0
+                                .Cells(rowfija + 4, 4).Value = manejo
+                                .Cells(rowfija + 5, 4).Value = cargada
+                                .Cells(rowfija + 6, 4).Value = thc
+                                
+                                .Cells(rowfija + 1, 5).Value = "Flete libras ($)"
+                                .Cells(rowfija + 2, 5).Value = "Flete volumen ($)"
+                                .Cells(rowfija + 3, 5).Value = "Flete utilizado ($)"
+                                .Cells(rowfija + 4, 5).Value = "Sobre estadia ($)"
+                                .Cells(rowfija + 5, 5).Value = "SED ($)"
+                                .Cells(rowfija + 6, 5).Value = "Otros cargos ($)"
+                                
+                                .Cells(rowfija + 1, 6).Formula = 0
+                                .Cells(rowfija + 2, 6).Formula = 0
+                                .Cells(rowfija + 3, 6).Formula = "=MAX(" & .Cells(rowfija + 1, 6).Address(False, False) & "," & .Cells(rowfija + 2, 6).Address(False, False) & "," & .Cells(rowfija + 1, 4).Address(False, False) & ")"
+                                .Cells(rowfija + 4, 6).Formula = sobrestadia
+                                .Cells(rowfija + 5, 6).Formula = sed
+                                .Cells(rowfija + 6, 6).Formula = forms.costonoclasificados
+                                
+                                .Cells(rowfija + 1, 7).Value = "Seguro minimo ($)"
+                                .Cells(rowfija + 2, 7).Value = "% Seguro ($)"
+                                .Cells(rowfija + 3, 7).Value = "Seguro ($)"
+                                .Cells(rowfija + 4, 7).Value = "Dias libres ($)"
+                                .Cells(rowfija + 5, 7).Value = "Salidas"
+                                .Cells(rowfija + 6, 7).Value = "Flete total ($)"
+                                
+                                .Cells(rowfija + 1, 8).Value = seguro_minimo
+                                .Cells(rowfija + 2, 8).Value = porcentaje_seguro
+                                .Cells(rowfija + 3, 8).Formula = "=MAX((" & .Cells(rowfija + 2, 8).Address(False, False) & "*" & .Cells(rowtotales1, 12).Address(False, False) & "/100)," & .Cells(rowfija + 1, 8).Address(False, False) & ")"
+                                .Cells(rowfija + 4, 8).Value = dias_libres
+                                .Cells(rowfija + 5, 8).Value = dias_salida
+                                .Cells(rowfija + 6, 8).Formula = "=(" & .Cells(rowfija + 4, 4).Address(False, False) & "+" & .Cells(rowfija + 5, 4).Address(False, False) & "+" & .Cells(rowfija + 6, 4).Address(False, False) & "+" & .Cells(rowfija + 3, 6).Address(False, False) _
+                                & "+" & .Cells(rowfija + 4, 6).Address(False, False) & "+" & .Cells(rowfija + 5, 6).Address(False, False) & "+" & .Cells(rowfija + 6, 6).Address(False, False) & ")*" & .Cells(rowfija + 6, 2).Address(False, False) & "+" & .Cells(rowfija + 3, 8).Address(False, False)
+                                
+                                .Cells(rowfija + 1, 9).Value = "CIF ($)"
+                                .Cells(rowfija + 1, 10).Formula = "=" & .Cells(rowtotales2, 6).Address(False, False) & "+" & .Cells(rowtotales1, 12).Address(False, False) & "+" & .Cells(rowfija + 6, 8).Address(False, False)
+                                
+                                rowactual = rowfija + 8
+                                .Cells(rowactual, 1).Value = "Informacion arancelaria"
+                                .Cells(rowactual + 1, 1).Value = "Partida"
+                                .Cells(rowactual + 1, 2).Value = "Categoria"
+                                .Cells(rowactual + 1, 3).Value = "Descripcion"
+                                .Cells(rowactual + 1, 4).Value = "CIF ($)"
+                                .Cells(rowactual + 1, 5).Value = "DAI ($)"
+                                .Cells(rowactual + 1, 6).Value = "Selectivo ($)"
+                                .Cells(rowactual + 1, 7).Value = "ISV ($)"
+                                .Cells(rowactual + 1, 8).Value = "Total ($)"
+                                rowactual = rowactual + 2
+                            End With
+                            End If
+                            
+                            
+                            rowstart5 = rowactual - 2
+                            
+                            For p = 0 To UBound(array_productos)
+                                cif_temporal = array_productos(p)(8) / venta_total * gastos_previos + array_productos(p)(8)
+                                dai_temporal = cif_temporal * (1 + aranceles_producto(p)(8) / 100)
+                                selectivo_temporal = cif_temporal * (1 + aranceles_producto(p)(5) / 100)
+                                isv_temporal = selectivo * (1 + aranceles_producto(p)(6) / 100)
+                                dai_total = dai_total + dai_temporal - cif_temporal
+                                selectivo_total = selectivo_total + selectivo_temporal
+                                isv_total = isv_total + isv_temporal
+                                precio_temporal = cif_temporal * (1 + aranceles_producto(p)(8) / 100) * (1 + aranceles_producto(p)(5) / 100) * (1 + aranceles_producto(p)(6) / 100)
+                                impuesto_total = impuesto_total + (precio_temporal - cif_temporal)
+                                
+                                If UserForm2.CheckBox8.Value = True Then
+                                With newwb.Sheets(sheet_number)
+                                .Cells(rowactual, 1).Formula = "=" & .Cells(14 + p, 1).Address(False, False)
+                                .Cells(rowactual, 2).Formula = "=" & .Cells(14 + p, 2).Address(False, False)
+                                .Cells(rowactual, 3).Formula = "=" & .Cells(14 + p, 3).Address(False, False)
+                                .Cells(rowactual, 4).Formula = "=" & .Cells(14 + p, 12).Address(False, False) & "/" & .Cells(rowtotales1, 12).Address(False, False) & "*(" & .Cells(rowfija + 1, 10).Address(False, False) & "-" & .Cells(rowtotales1, 12).Address(False, False) & ")+" & .Cells(14 + p, 12).Address(False, False)
+                                .Cells(rowactual, 5).Formula = "=" & .Cells(rowactual, 4).Address & "/100*" & .Cells(14 + p, 13).Address(False, False)
+                                .Cells(rowactual, 6).Formula = "=(" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & ")/100*" & .Cells(14 + p, 14).Address(False, False)
+                                .Cells(rowactual, 7).Formula = "=(" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & "+" & .Cells(rowactual, 6).Address(False, False) & ")/100*" & .Cells(14 + p, 15).Address(False, False)
+                                .Cells(rowactual, 8).Formula = "=" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & "+" & .Cells(rowactual, 6).Address(False, False) & "+" & .Cells(rowactual, 7).Address(False, False)
+                                End With
+                                End If
+                                rowactual = rowactual + 1
+                            Next p
+                            
+                            
+                            rowfinal5 = rowactual
+                            
+                            
+                            If UserForm2.CheckBox8.Value = True Then
+                            With newwb.Sheets(sheet_number)
+                            .Cells(rowactual, 8).Formula = "=sum(" & .Cells(rowactual - 1, 8).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 8).Address(False, False) & ")"
+                            .Cells(rowactual, 7).Formula = "=sum(" & .Cells(rowactual - 1, 7).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 7).Address(False, False) & ")"
+                            .Cells(rowactual, 6).Formula = "=sum(" & .Cells(rowactual - 1, 6).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 6).Address(False, False) & ")"
+                            .Cells(rowactual, 5).Formula = "=sum(" & .Cells(rowactual - 1, 5).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 5).Address(False, False) & ")"
+                            .Cells(rowactual, 4).Formula = "=sum(" & .Cells(rowactual - 1, 4).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 4).Address(False, False) & ")"
+                            
+                            rowtotales4 = rowactual
+                            
+                            rowactual = rowactual + 2
+                            
+                            rowstart6 = rowactual
+                            rowfinal6 = rowactual + 4
+                            
+                            .Cells(rowactual, 1).Value = "Gastos de aduana"
+                            .Cells(rowactual + 1, 1).Value = "Agente aduanero"
+                            .Cells(rowactual + 2, 1).Value = "Porcentaje sobre CIF"
+                            .Cells(rowactual + 3, 1).Value = "Honorarios sobre CIF"
+                            .Cells(rowactual + 4, 1).Value = "Tarifa fija ($)"
+                            
+                            .Cells(rowactual + 1, 2).Value = forms.aduaneros(y)
+                            .Cells(rowactual + 2, 2).Value = porcentaje_cif
+                            .Cells(rowactual + 3, 2).Formula = "=" & .Cells(rowfija + 1, 10).Address(False, False) & "*" & .Cells(rowactual + 2, 2).Address(False, False) & "/100"
+                            .Cells(rowactual + 4, 2).Value = tarifa_tramite
+                            
+                            .Cells(rowactual + 1, 3).Value = "DUA ($)"
+                            .Cells(rowactual + 2, 3).Value = "DVA ($)"
+                            .Cells(rowactual + 3, 3).Value = "STD ($)"
+                            .Cells(rowactual + 4, 3).Value = "Total ($)"
+                            
+                            .Cells(rowactual + 1, 4).Value = dua
+                            .Cells(rowactual + 2, 4).Value = dva * forms.cantfacturas
+                            .Cells(rowactual + 3, 4).Value = std
+                            .Cells(rowactual + 4, 4).Formula = "=" & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False) & "+" & .Cells(rowactual + 2, 4).Address(False, False) & "+" & .Cells(rowactual + 3, 4).Address(False, False)
+                            
+                            rowtotales5 = rowactual + 4
+                            
+                            
+                            
+                            
+                            rowactual = rowactual + 6
+                            
+                            rowstart7 = rowactual
+                            rowfinal7 = rowactual + 8
+                            
+                            .Cells(rowactual, 1).Value = "Resumen de gastos"
+                            
+                            .Cells(rowactual + 1, 1).Value = "Precio de compra ($)"
+                            .Cells(rowactual + 2, 1).Value = "Flete internacional ($)"
+                            .Cells(rowactual + 3, 1).Value = "Flete extranjero ($)"
+                            .Cells(rowactual + 4, 1).Value = "Flete nacional ($)"
+                            .Cells(rowactual + 5, 1).Value = "CIF ($)"
+                            .Cells(rowactual + 6, 1).Value = "DAI ($)"
+                            .Cells(rowactual + 7, 1).Value = "Selectivo ($)"
+                            .Cells(rowactual + 8, 1).Value = "ISV ($)"
+                            
+                            .Cells(rowactual + 1, 2).Formula = "=" & .Cells(rowtotales1, 12).Address(False, False)
+                            .Cells(rowactual + 2, 2).Formula = "=" & .Cells(rowfija + 6, 8).Address(False, False)
+                            .Cells(rowactual + 3, 2).Formula = "=" & .Cells(rowtotales2, 6).Address(False, False)
+                            .Cells(rowactual + 4, 2).Formula = "=" & .Cells(rowtotales3, 6).Address(False, False)
+                            .Cells(rowactual + 5, 2).Formula = "=" & .Cells(rowfija + 1, 10).Address(False, False)
+                            .Cells(rowactual + 6, 2).Value = "=" & .Cells(rowtotales4, 5).Address(False, False)
+                            .Cells(rowactual + 7, 2).Value = "=" & .Cells(rowtotales4, 6).Address(False, False)
+                            .Cells(rowactual + 8, 2).Value = "=" & .Cells(rowtotales4, 7).Address(False, False)
+                            
+                            .Cells(rowactual + 1, 3).Value = "Agente aduanero ($)"
+                            .Cells(rowactual + 2, 3).Value = "Flete (%)"
+                            .Cells(rowactual + 3, 3).Value = "DAI (%)"
+                            .Cells(rowactual + 4, 3).Value = "Selectivo (%)"
+                            .Cells(rowactual + 5, 3).Value = "ISV (%)"
+                            .Cells(rowactual + 6, 3).Value = "Costo (%)"
+                            .Cells(rowactual + 7, 3).Value = "Precio final ($)"
+                            
+                            .Cells(rowactual + 1, 4).Formula = "=" & .Cells(rowtotales5, 4).Address(False, False)
+                            .Cells(rowactual + 2, 4).Formula = "=" & .Cells(rowactual + 2, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 3, 4).Formula = "=" & .Cells(rowactual + 6, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 4, 4).Formula = "=" & .Cells(rowactual + 7, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 5, 4).Formula = "=" & .Cells(rowactual + 8, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 6, 4).Formula = "=(" & .Cells(rowactual + 2, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & _
+                            .Cells(rowactual + 6, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False) & ")/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 7, 4).Formula = "=" & .Cells(rowactual + 1, 2).Address(False, False) & "+" & .Cells(rowactual + 2, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & _
+                            .Cells(rowactual + 6, 2).Address(False, False) & "+" & .Cells(rowactual + 7, 2).Address(False, False) & "+" & .Cells(rowactual + 8, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False)
+                            End With
+                            End If
+                            
+                            precio_final = impuesto_total + cif + aduana_total + trans_externo
+                            With ActiveSheet
+                            
+                            .Cells(lastabsoluterow, 1).Value = lastrangerow
+                            .Cells(lastabsoluterow, 2).Value = Date
+                            .Cells(lastabsoluterow, 3).Value = forms.salida
+                            .Cells(lastabsoluterow, 4).Value = forms.destino
+                            .Cells(lastabsoluterow, 5).Value = "FCL"
+                            .Cells(lastabsoluterow, 6).Value = forms.proveedoresfcl(i)
+                            .Cells(lastabsoluterow, 7).Value = contenedor
+                            .Cells(lastabsoluterow, 8).Value = cantidad_contenedores
+                            .Cells(lastabsoluterow, 9).Value = forms.tipo1
+                            .Cells(lastabsoluterow, 10).Value = forms.tipo2
+                            .Cells(lastabsoluterow, 11).Value = forms.tipo3
+                            .Cells(lastabsoluterow, 12).Value = forms.tipo4
+                            .Cells(lastabsoluterow, 13).Value = forms.proveedorvehiculos1
+                            .Cells(lastabsoluterow, 14).Value = forms.proveedorvehiculos2
+                            .Cells(lastabsoluterow, 15).Value = forms.proveedorvehiculos3
+                            .Cells(lastabsoluterow, 16).Value = forms.proveedorvehiculos4
+                            .Cells(lastabsoluterow, 17).Value = forms.numerode1
+                            .Cells(lastabsoluterow, 18).Value = forms.numerode2
+                            .Cells(lastabsoluterow, 19).Value = forms.numerode3
+                            .Cells(lastabsoluterow, 20).Value = forms.numerode4
+                            .Cells(lastabsoluterow, 21).Value = forms.tipo11
+                            .Cells(lastabsoluterow, 22).Value = forms.tipo22
+                            .Cells(lastabsoluterow, 23).Value = forms.tipo33
+                            .Cells(lastabsoluterow, 24).Value = forms.tipo44
+                            .Cells(lastabsoluterow, 25).Value = forms.proveedorvehiculos11
+                            .Cells(lastabsoluterow, 26).Value = forms.proveedorvehiculos22
+                            .Cells(lastabsoluterow, 27).Value = forms.proveedorvehiculos33
+                            .Cells(lastabsoluterow, 28).Value = forms.proveedorvehiculos44
+                            .Cells(lastabsoluterow, 29).Value = forms.numerode11
+                            .Cells(lastabsoluterow, 30).Value = forms.numerode22
+                            .Cells(lastabsoluterow, 31).Value = forms.numerode33
+                            .Cells(lastabsoluterow, 32).Value = forms.numerode44
+                            .Cells(lastabsoluterow, 33).Value = working_string_publica
+                            .Cells(lastabsoluterow, 34).Value = forms.cantfacturas
+                            .Cells(lastabsoluterow, 35).Value = forms.diaspuerto
+                            .Cells(lastabsoluterow, 36).Value = forms.costonoclasificados
+                            .Cells(lastabsoluterow, 37).Value = forms.aduaneros(y)
+                            .Cells(lastabsoluterow, 38).Value = venta_total
+                            .Cells(lastabsoluterow, 39).Value = flete
+                            .Cells(lastabsoluterow, 40).Value = trans_externo
+                            .Cells(lastabsoluterow, 41).Value = trans_interno
+                            .Cells(lastabsoluterow, 42).Value = aduanatotal
+                            .Cells(lastabsoluterow, 43).Value = tiempo_transito
+                            .Cells(lastabsoluterow, 44).Value = dias_salida
+                            .Cells(lastabsoluterow, 45).Value = impuesto_total
+                            .Cells(lastabsoluterow, 46).Value = (flete + trans_externo + trans_interno) / venta_total * 100
+                            .Cells(lastabsoluterow, 47).Value = aduanatotal / venta_total * 100
+                            .Cells(lastabsoluterow, 48).Value = impuesto_total / venta_total * 100
+                            .Cells(lastabsoluterow, 49).Value = (flete + trans_externo + trans_interno + dai_total) / venta_total * 100
+                            .Cells(lastabsoluterow, 50).Value = precio_final
+                            .Cells(lastabsoluterow, 51).Value = units
+                            
+                            End With
+                            
+                            
+                            
+                            'Contador para la ultima fila
+                            Call formatting(newwb, sheet_number, rowstart1, rowfinal1, rowstart2, rowfinal2, rowstart3, rowfinal3, rowstart4, rowfinal4, rowstart5, rowfinal5, rowstart6, rowfinal6, rowstart7, rowfinal7)
+                            sheet_number = sheet_number + 1
+                            lastrangerow = lastrangerow + 1
+                            lastabsoluterow = lastabsoluterow + 1
+                        End With
+                    End If
+                Next j
+            Next y
+        Next i
+    End If
+    
+    'PARA LCL--------------------------------------------------------------------------------------
+
+    If forms.lcl = True Then
+        For i = 0 To UBound(forms.proveedoreslcl)
+            For y = 0 To UBound(forms.aduaneros)
+                oldwb.Activate
+                'Itera por todas las rows de las tarifas lcl y determina que row leer
+                For j = 1 To Range("TARIFAS_LCL").Rows.Count
+                    oldwb.Activate
+                    If Range("TARIFAS_LCL").Cells(j, 1).Value = forms.proveedoreslcl(i) And _
+                    Range("TARIFAS_LCL").Cells(j, 3).Value = forms.salida And _
+                    Range("TARIFAS_LCL").Cells(j, 4).Value = forms.destino Then
+                        With Range("TARIFAS_LCL")
+                            fecha_actualizacion = .Cells(j, 2)
+                            tarifa_libra = .Cells(j, 5)
+                            tarifa_pie = .Cells(j, 7)
+                            tarifa_vlibra = .Cells(j, 6)
+                            tarifa_minima = .Cells(j, 8)
+                            manejo = .Cells(j, 9)
+                            thc = .Cells(j, 10)
+                            sed = .Cells(j, 11)
+                            porcentaje_seguro = .Cells(j, 12)
+                            seguro_minimo = .Cells(j, 13)
+                            sobre_estadia = .Cells(j, 18)
+                            dias_libres = .Cells(j, 20)
+                            dias_salida = .Cells(j, 23)
+                            tiempo_transito = .Cells(j, 24)
+                            If UserForm2.CheckBox8.Value = True Then
+                            If sheet_number <> 1 Then
+                                newwb.Sheets.Add after:=newwb.Sheets(newwb.Sheets.Count)
+                            End If
+                            newwb.Activate
+                            newwb.Worksheets(1).Range("A1:O" & CStr(rowfija)).Copy
+                            newwb.Worksheets(sheet_number).Paste
+                            oldwb.Activate
+                            End If
+                            
+                            ReDim tarifas(2)
+                            tarifas(0) = tarifa_pie * volumen_total
+                            tarifas(1) = tarifa_libra * peso_total
+                            tarifas(2) = tarifa_vlibra * volumen_total * 1728 / 166
+                            tarifa_actual = 0
+                            
+                            For e = 0 To 2
+                                If tarifas(e) > tarifa_actual Then
+                                    tarifa_actual = tarifas(e)
+                                End If
+                            Next e
+                            
+                            
+                            
+                            If porcentaje_seguro / 100 * fob > seguro_minimo Then
+                                seguro = porcentaje_seguro / 100 * fob
+                            Else
+                                seguro = seguro_minimo
+                            End If
+                            
+                        
+                            
+                            If promedio_facturas >= 2500 Then
+                                sed = .Cells(j, 11) * forms.cantfacturas
+                            Else
+                                sed = 0
+                            End If
+                            
+                            If forms.diaspuerto + tiempo_transito > dias_libres Then
+                                sobrestadia = ((forms.diaspuerto + tiempo_transito) - dias_libres) * sobre_estadia
+                            Else
+                                sobrestadia = 0
+                            End If
+                            
+                            
+                        
+                            
+                            flete = tarifa_actual + manejo + thc + sed + sobrestadia + seguro + forms.costonoclasificados
+                            
+                            cif = fob + flete
+                            
+                            'Determina lo gastado en aduaneros
+                            For o = 1 To Range("TARIFAS_ADUANEROS").Rows.Count
+                                With Range("TARIFAS_ADUANEROS")
+                                    aduaneroactual = .Cells(o, 1) & " - " & .Cells(o, 3)
+                                    If aduaneroactual = forms.aduaneros(y) Then
+                                        tarifa_tramite = .Cells(o, 4)
+                                        porcentaje_cif = .Cells(o, 5)
+                                        dua = .Cells(o, 6)
+                                        dva = .Cells(o, 7)
+                                        std = .Cells(o, 8)
+                                        
+                                        aduanatotal = .Cells(o, 4) + (.Cells(o, 5) / 100 * cif) + .Cells(o, 6) + (.Cells(o, 7) * forms.cantfacturas) + .Cells(o, 8)
+                                        Exit For
+                                    End If
+                                End With
+                            Next o
+                            
+                            'Determina los impuestos que se tienen que pagar
+                            impuesto_total = 0
+                            dai_total = 0
+                            selectivo_total = 0
+                            isv_total = 0
+                            
+                            gastos_previos = cif - venta_total
+                            
+                            rowstart4 = rowfija
+                            rowfinal4 = rowfija + 6
+                            
+                            If UserForm2.CheckBox8.Value = True Then
+                            With newwb.Sheets(sheet_number)
+                            .Cells(rowfija, 1).Value = "Transporte internacional"
+                            .Cells(rowfija + 1, 1).Value = "Proveedor"
+                            .Cells(rowfija + 2, 1).Value = "Salida"
+                            .Cells(rowfija + 3, 1).Value = "Destino"
+                            .Cells(rowfija + 4, 1).Value = "Tipo transito"
+                            .Cells(rowfija + 5, 1).Value = "Tiempo transito"
+                            .Cells(rowfija + 6, 1).Value = "Contenedor"
+                            
+                            .Cells(rowfija + 1, 2).Value = forms.proveedoreslcl(i)
+                            .Cells(rowfija + 2, 2).Value = forms.salida
+                            .Cells(rowfija + 3, 2).Value = forms.destino
+                            .Cells(rowfija + 4, 2).Value = "LCL"
+                            .Cells(rowfija + 5, 2).Value = tiempo_transito
+                            .Cells(rowfija + 6, 2).Value = "ND"
+                            
+                            .Cells(rowfija + 1, 3).Value = "Tarifa minima ($)"
+                            .Cells(rowfija + 2, 3).Value = "Tarifa libra ($)"
+                            .Cells(rowfija + 3, 3).Value = "Tarifa volumen ($)"
+                            .Cells(rowfija + 4, 3).Value = "BL + manejo ($)"
+                            .Cells(rowfija + 5, 3).Value = "Cargada ($)"
+                            .Cells(rowfija + 6, 3).Value = "THC ($)"
+                            
+                            .Cells(rowfija + 1, 4).Value = tarifa_minima
+                            .Cells(rowfija + 2, 4).Value = tarifa_libra
+                            .Cells(rowfija + 3, 4).Value = tarifa_pie
+                            .Cells(rowfija + 4, 4).Value = manejo
+                            .Cells(rowfija + 5, 4).Value = 0
+                            .Cells(rowfija + 6, 4).Value = thc
+                            
+                            .Cells(rowfija + 1, 5).Value = "Flete libras ($)"
+                            .Cells(rowfija + 2, 5).Value = "Flete volumen ($)"
+                            .Cells(rowfija + 3, 5).Value = "Flete utilizado ($)"
+                            .Cells(rowfija + 4, 5).Value = "Sobre estadia ($)"
+                            .Cells(rowfija + 5, 5).Value = "SED ($)"
+                            .Cells(rowfija + 6, 5).Value = "Otros cargos ($)"
+                            
+                            .Cells(rowfija + 1, 6).Formula = "=" & .Cells(rowtotales1, 11).Address(False, False) & "*" & .Cells(rowfija + 2, 4).Address(False, False)
+                            .Cells(rowfija + 2, 6).Formula = "=" & .Cells(rowtotales1, 10).Address(False, False) & "*" & .Cells(rowfija + 3, 4).Address(False, False)
+                            .Cells(rowfija + 3, 6).Formula = "=MAX(" & .Cells(rowfija + 1, 6).Address(False, False) & "," & .Cells(rowfija + 2, 6).Address(False, False) & "," & .Cells(rowfija + 1, 4).Address(False, False) & ")"
+                            
+                            .Cells(rowfija + 4, 6).Formula = sobrestadia
+                            .Cells(rowfija + 5, 6).Formula = sed
+                            .Cells(rowfija + 6, 6).Formula = forms.costonoclasificados
+                            
+                            .Cells(rowfija + 1, 7).Value = "Seguro minimo ($)"
+                            .Cells(rowfija + 2, 7).Value = "% Seguro ($)"
+                            .Cells(rowfija + 3, 7).Value = "Seguro ($)"
+                            .Cells(rowfija + 4, 7).Value = "Dias libres ($)"
+                            .Cells(rowfija + 5, 7).Value = "Salidas"
+                            .Cells(rowfija + 6, 7).Value = "Flete total ($)"
+                            
+                            .Cells(rowfija + 1, 8).Value = seguro_minimo
+                            .Cells(rowfija + 2, 8).Value = porcentaje_seguro
+                            .Cells(rowfija + 3, 8).Formula = "=MAX((" & .Cells(rowfija + 2, 8).Address(False, False) & "*" & .Cells(rowtotales1, 12).Address(False, False) & "/100)," & .Cells(rowfija + 1, 8).Address(False, False) & ")"
+                            .Cells(rowfija + 4, 8).Value = dias_libres
+                            .Cells(rowfija + 5, 8).Value = dias_salida
+                            .Cells(rowfija + 6, 8).Formula = "=" & .Cells(rowfija + 4, 4).Address & "+" & .Cells(rowfija + 5, 4).Address(False, False) & "+" & .Cells(rowfija + 6, 4).Address(False, False) & "+" & .Cells(rowfija + 3, 6).Address(False, False) _
+                            & "+" & .Cells(rowfija + 4, 6).Address(False, False) & "+" & .Cells(rowfija + 5, 6).Address(False, False) & "+" & .Cells(rowfija + 6, 6).Address(False, False) & "+" & .Cells(rowfija + 3, 8).Address(False, False)
+                            
+                            .Cells(rowfija + 1, 9).Value = "CIF ($)"
+                            .Cells(rowfija + 1, 10).Formula = "=" & .Cells(rowtotales2, 6).Address(False, False) & "+" & .Cells(rowtotales1, 12).Address(False, False) & "+" & .Cells(rowfija + 6, 8).Address(False, False)
+                            
+                            rowactual = rowfija + 8
+                            .Cells(rowactual, 1).Value = "Informacion arancelaria"
+                            .Cells(rowactual + 1, 1).Value = "Partida"
+                            .Cells(rowactual + 1, 2).Value = "Categoria"
+                            .Cells(rowactual + 1, 3).Value = "Descripcion"
+                            .Cells(rowactual + 1, 4).Value = "CIF ($)"
+                            .Cells(rowactual + 1, 5).Value = "DAI ($)"
+                            .Cells(rowactual + 1, 6).Value = "Selectivo ($)"
+                            .Cells(rowactual + 1, 7).Value = "ISV ($)"
+                            .Cells(rowactual + 1, 8).Value = "Total ($)"
+                            rowactual = rowactual + 2
+                            End With
+                            End If
+                            
+                            rowstart5 = rowactual - 2
+                            
+                            For p = 0 To UBound(array_productos)
+                                cif_temporal = array_productos(p)(8) / venta_total * gastos_previos + array_productos(p)(8)
+                                dai_temporal = cif_temporal * (1 + aranceles_producto(p)(8) / 100)
+                                selectivo_temporal = cif_temporal * (1 + aranceles_producto(p)(5) / 100)
+                                isv_temporal = selectivo * (1 + aranceles_producto(p)(6) / 100)
+                                dai_total = dai_total + dai_temporal - cif_temporal
+                                selectivo_total = selectivo_total + selectivo_temporal
+                                isv_total = isv_total + isv_temporal
+                                precio_temporal = cif_temporal * (1 + aranceles_producto(p)(8) / 100) * (1 + aranceles_producto(p)(5) / 100) * (1 + aranceles_producto(p)(6) / 100)
+                                impuesto_total = impuesto_total + (precio_temporal - cif_temporal)
+                                If UserForm2.CheckBox8.Value = True Then
+                                With newwb.Sheets(sheet_number)
+                                .Cells(rowactual, 1).Formula = "=" & .Cells(14 + p, 1).Address(False, False)
+                                .Cells(rowactual, 2).Formula = "=" & .Cells(14 + p, 2).Address(False, False)
+                                .Cells(rowactual, 3).Formula = "=" & .Cells(14 + p, 3).Address(False, False)
+                                .Cells(rowactual, 4).Formula = "=" & .Cells(14 + p, 12).Address(False, False) & "/" & .Cells(rowtotales1, 12).Address(False, False) & "*(" & .Cells(rowfija + 1, 10).Address(False, False) & "-" & .Cells(rowtotales1, 12).Address(False, False) & ")+" & .Cells(14 + p, 12).Address(False, False)
+                                .Cells(rowactual, 5).Formula = "=" & .Cells(rowactual, 4).Address & "/100*" & .Cells(14 + p, 13).Address(False, False)
+                                .Cells(rowactual, 6).Formula = "=(" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & ")/100*" & .Cells(14 + p, 14).Address(False, False)
+                                .Cells(rowactual, 7).Formula = "=(" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & "+" & .Cells(rowactual, 6).Address(False, False) & ")/100*" & .Cells(14 + p, 15).Address(False, False)
+                                .Cells(rowactual, 8).Formula = "=" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & "+" & .Cells(rowactual, 6).Address(False, False) & "+" & .Cells(rowactual, 7).Address(False, False)
+                                End With
+                                End If
+                                rowactual = rowactual + 1
+                            Next p
+                            
+                            rowfinal5 = rowactual
+                            
+                            If UserForm2.CheckBox8.Value = True Then
+                            
+                            
+                            
+                            With newwb.Sheets(sheet_number)
+                            .Cells(rowactual, 8).Formula = "=sum(" & .Cells(rowactual - 1, 8).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 8).Address(False, False) & ")"
+                            .Cells(rowactual, 7).Formula = "=sum(" & .Cells(rowactual - 1, 7).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 7).Address(False, False) & ")"
+                            .Cells(rowactual, 6).Formula = "=sum(" & .Cells(rowactual - 1, 6).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 6).Address(False, False) & ")"
+                            .Cells(rowactual, 5).Formula = "=sum(" & .Cells(rowactual - 1, 5).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 5).Address(False, False) & ")"
+                            .Cells(rowactual, 4).Formula = "=sum(" & .Cells(rowactual - 1, 4).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 4).Address(False, False) & ")"
+                            
+                            rowtotales4 = rowactual
+                            
+                            rowactual = rowactual + 2
+                            
+                            
+                            rowstart6 = rowactual
+                            rowfinal6 = rowactual + 4
+                            
+                            .Cells(rowactual, 1).Value = "Gastos de aduana"
+                            .Cells(rowactual + 1, 1).Value = "Agente aduanero"
+                            .Cells(rowactual + 2, 1).Value = "Porcentaje sobre CIF"
+                            .Cells(rowactual + 3, 1).Value = "Honorarios sobre CIF"
+                            .Cells(rowactual + 4, 1).Value = "Tarifa fija ($)"
+                            
+                            .Cells(rowactual + 1, 2).Value = forms.aduaneros(y)
+                            .Cells(rowactual + 2, 2).Value = porcentaje_cif
+                            .Cells(rowactual + 3, 2).Formula = "=" & .Cells(rowfija + 1, 10).Address(False, False) & "*" & .Cells(rowactual + 2, 2).Address(False, False) & "/100"
+                            .Cells(rowactual + 4, 2).Value = tarifa_tramite
+                            
+                            .Cells(rowactual + 1, 3).Value = "DUA ($)"
+                            .Cells(rowactual + 2, 3).Value = "DVA ($)"
+                            .Cells(rowactual + 3, 3).Value = "STD ($)"
+                            .Cells(rowactual + 4, 3).Value = "Total ($)"
+                            
+                            .Cells(rowactual + 1, 4).Value = dua
+                            .Cells(rowactual + 2, 4).Value = dva * forms.cantfacturas
+                            .Cells(rowactual + 3, 4).Value = std
+                            .Cells(rowactual + 4, 4).Formula = "=" & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False) & "+" & .Cells(rowactual + 2, 4).Address(False, False) & "+" & .Cells(rowactual + 3, 4).Address(False, False)
+                            
+                            rowtotales5 = rowactual + 4
+                            
+                            
+                            
+                            rowactual = rowactual + 6
+                            
+                            rowstart7 = rowactual
+                            rowfinal7 = rowactual + 8
+                            
+                            .Cells(rowactual, 1).Value = "Resumen de gastos"
+                            
+                            .Cells(rowactual + 1, 1).Value = "Precio de compra ($)"
+                            .Cells(rowactual + 2, 1).Value = "Flete internacional ($)"
+                            .Cells(rowactual + 3, 1).Value = "Flete extranjero ($)"
+                            .Cells(rowactual + 4, 1).Value = "Flete nacional ($)"
+                            .Cells(rowactual + 5, 1).Value = "CIF ($)"
+                            .Cells(rowactual + 6, 1).Value = "DAI ($)"
+                            .Cells(rowactual + 7, 1).Value = "Selectivo ($)"
+                            .Cells(rowactual + 8, 1).Value = "ISV ($)"
+                            
+                            .Cells(rowactual + 1, 2).Formula = "=" & .Cells(rowtotales1, 12).Address(False, False)
+                            .Cells(rowactual + 2, 2).Formula = "=" & .Cells(rowfija + 6, 8).Address(False, False)
+                            .Cells(rowactual + 3, 2).Formula = "=" & .Cells(rowtotales2, 6).Address(False, False)
+                            .Cells(rowactual + 4, 2).Formula = "=" & .Cells(rowtotales3, 6).Address(False, False)
+                            .Cells(rowactual + 5, 2).Formula = "=" & .Cells(rowfija + 1, 10).Address(False, False)
+                            .Cells(rowactual + 6, 2).Value = "=" & .Cells(rowtotales4, 5).Address(False, False)
+                            .Cells(rowactual + 7, 2).Value = "=" & .Cells(rowtotales4, 6).Address(False, False)
+                            .Cells(rowactual + 8, 2).Value = "=" & .Cells(rowtotales4, 7).Address(False, False)
+                            
+                            .Cells(rowactual + 1, 3).Value = "Agente aduanero ($)"
+                            .Cells(rowactual + 2, 3).Value = "Flete (%)"
+                            .Cells(rowactual + 3, 3).Value = "DAI (%)"
+                            .Cells(rowactual + 4, 3).Value = "Selectivo (%)"
+                            .Cells(rowactual + 5, 3).Value = "ISV (%)"
+                            .Cells(rowactual + 6, 3).Value = "Costo (%)"
+                            .Cells(rowactual + 7, 3).Value = "Precio final ($)"
+                            
+                            .Cells(rowactual + 1, 4).Formula = "=" & .Cells(rowtotales5, 4).Address(False, False)
+                            .Cells(rowactual + 2, 4).Formula = "=" & .Cells(rowactual + 2, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 3, 4).Formula = "=" & .Cells(rowactual + 6, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 4, 4).Formula = "=" & .Cells(rowactual + 7, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 5, 4).Formula = "=" & .Cells(rowactual + 8, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 6, 4).Formula = "=(" & .Cells(rowactual + 2, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & _
+                            .Cells(rowactual + 6, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False) & ")/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 7, 4).Formula = "=" & .Cells(rowactual + 1, 2).Address(False, False) & "+" & .Cells(rowactual + 2, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & _
+                            .Cells(rowactual + 6, 2).Address(False, False) & "+" & .Cells(rowactual + 7, 2).Address(False, False) & "+" & .Cells(rowactual + 8, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False)
+                            End With
+                            End If
+                            precio_final = impuesto_total + cif + aduana_total + trans_externo
+                            With ActiveSheet
+                            .Cells(lastabsoluterow, 1).Value = lastrangerow
+                            .Cells(lastabsoluterow, 2).Value = Date
+                            .Cells(lastabsoluterow, 3).Value = forms.salida
+                            .Cells(lastabsoluterow, 4).Value = forms.destino
+                            .Cells(lastabsoluterow, 5).Value = "LCL"
+                            .Cells(lastabsoluterow, 6).Value = forms.proveedoreslcl(i)
+                            .Cells(lastabsoluterow, 7).Value = "ND"
+                            .Cells(lastabsoluterow, 8).Value = "ND"
+                            .Cells(lastabsoluterow, 9).Value = forms.tipo1
+                            .Cells(lastabsoluterow, 10).Value = forms.tipo2
+                            .Cells(lastabsoluterow, 11).Value = forms.tipo3
+                            .Cells(lastabsoluterow, 12).Value = forms.tipo4
+                            .Cells(lastabsoluterow, 13).Value = forms.proveedorvehiculos1
+                            .Cells(lastabsoluterow, 14).Value = forms.proveedorvehiculos2
+                            .Cells(lastabsoluterow, 15).Value = forms.proveedorvehiculos3
+                            .Cells(lastabsoluterow, 16).Value = forms.proveedorvehiculos4
+                            .Cells(lastabsoluterow, 17).Value = forms.numerode1
+                            .Cells(lastabsoluterow, 18).Value = forms.numerode2
+                            .Cells(lastabsoluterow, 19).Value = forms.numerode3
+                            .Cells(lastabsoluterow, 20).Value = forms.numerode4
+                            .Cells(lastabsoluterow, 21).Value = forms.tipo11
+                            .Cells(lastabsoluterow, 22).Value = forms.tipo22
+                            .Cells(lastabsoluterow, 23).Value = forms.tipo33
+                            .Cells(lastabsoluterow, 24).Value = forms.tipo44
+                            .Cells(lastabsoluterow, 25).Value = forms.proveedorvehiculos11
+                            .Cells(lastabsoluterow, 26).Value = forms.proveedorvehiculos22
+                            .Cells(lastabsoluterow, 27).Value = forms.proveedorvehiculos33
+                            .Cells(lastabsoluterow, 28).Value = forms.proveedorvehiculos44
+                            .Cells(lastabsoluterow, 29).Value = forms.numerode11
+                            .Cells(lastabsoluterow, 30).Value = forms.numerode22
+                            .Cells(lastabsoluterow, 31).Value = forms.numerode33
+                            .Cells(lastabsoluterow, 32).Value = forms.numerode44
+                            .Cells(lastabsoluterow, 33).Value = working_string_publica
+                            .Cells(lastabsoluterow, 34).Value = forms.cantfacturas
+                            .Cells(lastabsoluterow, 35).Value = forms.diaspuerto
+                            .Cells(lastabsoluterow, 36).Value = forms.costonoclasificados
+                            .Cells(lastabsoluterow, 37).Value = forms.aduaneros(y)
+                            .Cells(lastabsoluterow, 38).Value = venta_total
+                            .Cells(lastabsoluterow, 39).Value = flete
+                            .Cells(lastabsoluterow, 40).Value = trans_externo
+                            .Cells(lastabsoluterow, 41).Value = trans_interno
+                            .Cells(lastabsoluterow, 42).Value = aduanatotal
+                            .Cells(lastabsoluterow, 43).Value = tiempo_transito
+                            .Cells(lastabsoluterow, 44).Value = dias_salida
+                            .Cells(lastabsoluterow, 45).Value = impuesto_total
+                            .Cells(lastabsoluterow, 46).Value = (flete + trans_externo + trans_interno) / venta_total * 100
+                            .Cells(lastabsoluterow, 47).Value = aduanatotal / venta_total * 100
+                            .Cells(lastabsoluterow, 48).Value = impuesto_total / venta_total * 100
+                            .Cells(lastabsoluterow, 49).Value = (flete + trans_externo + trans_interno + dai_total + aduanatotal) / venta_total * 100
+                            .Cells(lastabsoluterow, 50).Value = precio_final
+                            .Cells(lastabsoluterow, 51).Value = units
+                            
+                            End With
+                            'Contador para la ultima fila
+                            Call formatting(newwb, sheet_number, rowstart1, rowfinal1, rowstart2, rowfinal2, rowstart3, rowfinal3, rowstart4, rowfinal4, rowstart5, rowfinal5, rowstart6, rowfinal6, rowstart7, rowfinal7)
+                            sheet_number = sheet_number + 1
+                            lastrangerow = lastrangerow + 1
+                            lastabsoluterow = lastabsoluterow + 1
+                        End With
+                    End If
+                Next j
+            Next y
+        Next i
+    End If
+    
+    'PARA AEREO------------------------------------------------------------------------------------
+
+    If forms.aereo = True Then
+        For i = 0 To UBound(forms.proveedoresaereo)
+            For y = 0 To UBound(forms.aduaneros)
+                oldwb.Activate
+                'Itera por todas las rows de las tarifas aereo y determina que row leer
+                For j = 1 To Range("TARIFAS_AEREO").Rows.Count
+                    oldwb.Activate
+                    If Range("TARIFAS_AEREO").Cells(j, 1).Value = forms.proveedoresaereo(i) And _
+                    Range("TARIFAS_AEREO").Cells(j, 3).Value = forms.salida And _
+                    Range("TARIFAS_AEREO").Cells(j, 4).Value = forms.destino Then
+                        With Range("TARIFAS_AEREO")
+                            tarifa_libra = .Cells(j, 5)
+                            tarifa_pie = .Cells(j, 7)
+                            tarifa_vlibra = .Cells(j, 6)
+                            tarifa_minima = .Cells(j, 8)
+                            manejo = .Cells(j, 9)
+                            thc = .Cells(j, 10)
+                            sed = .Cells(j, 11)
+                            porcentaje_seguro = .Cells(j, 12)
+                            seguro_minimo = .Cells(j, 13)
+                            sobre_estadia = .Cells(j, 18)
+                            dias_libres = .Cells(j, 20)
+                            dias_salida = .Cells(j, 23)
+                            tiempo_transito = .Cells(j, 24)
+                            
+                            If UserForm2.CheckBox8.Value = True Then
+                            If sheet_number <> 1 Then
+                                newwb.Sheets.Add after:=newwb.Sheets(newwb.Sheets.Count)
+                            End If
+                            newwb.Activate
+                            newwb.Worksheets(1).Range("A1:O" & CStr(rowfija)).Copy
+                            newwb.Worksheets(sheet_number).Paste
+                            oldwb.Activate
+                            End If
+                            
+                            ReDim tarifas(2)
+                            tarifas(0) = tarifa_pie * volumen_total
+                            tarifas(1) = tarifa_libra * peso_total
+                            tarifas(2) = tarifa_vlibra * volumen_total * 1728 / 166
+                            tarifa_actual = 0
+
+                            For e = 0 To 2
+                                If tarifas(e) > tarifa_actual Then
+                                    tarifa_actual = tarifas(e)
+                                End If
+                            Next e
+
+
+
+
+                            If porcentaje_seguro / 100 * fob > seguro_minimo Then
+                                seguro = porcentaje_seguro / 100 * fob
+                            Else
+                                seguro = seguro_minimo
+                            End If
+
+
+
+                            If promedio_facturas >= 2500 Then
+                                sed = .Cells(j, 10) * forms.cantfacturas
+                            Else
+                                sed = 0
+                            End If
+
+                            If forms.diaspuerto + tiempo_transito > dias_libres Then
+                                sobrestadia = ((forms.diaspuerto + tiempo_transito) - dias_libres) * sobre_estadia
+                            Else
+                                sobrestadia = 0
+                            End If
+
+
+
+
+                            flete = tarifa_actual + manejo + thc + sed + sobrestadia + seguro
+
+                            cif = fob + flete + forms.costonoclasificados
+
+                            'Determina lo gastado en aduaneros
+                            For o = 1 To Range("TARIFAS_ADUANEROS").Rows.Count
+                                With Range("TARIFAS_ADUANEROS")
+                                    aduaneroactual = .Cells(o, 1) & " - " & .Cells(o, 3)
+                                    If aduaneroactual = forms.aduaneros(y) Then
+                                        tarifa_tramite = .Cells(o, 4)
+                                        porcentaje_cif = .Cells(o, 5)
+                                        dua = .Cells(o, 6)
+                                        dva = .Cells(o, 7)
+                                        std = .Cells(o, 8)
+
+                                        aduanatotal = .Cells(o, 4) + (.Cells(o, 5) / 100 * cif) + .Cells(o, 6) + (.Cells(o, 7) * forms.cantfacturas) + .Cells(o, 8)
+                                        Exit For
+                                    End If
+                                End With
+                            Next o
+
+                            'Determina los impuestos que se tienen que pagar
+                            impuesto_total = 0
+                            dai_total = 0
+                            selectivo_total = 0
+                            isv_total = 0
+                            gastos_previos = cif - venta_total
+                            
+                            rowstart4 = rowfija
+                            rowfinal4 = rowfija + 6
+                            
+                            If UserForm2.CheckBox8.Value = True Then
+                            With newwb.Sheets(sheet_number)
+                            .Cells(rowfija, 1).Value = "Transporte internacional"
+                            .Cells(rowfija + 1, 1).Value = "Proveedor"
+                            .Cells(rowfija + 2, 1).Value = "Salida"
+                            .Cells(rowfija + 3, 1).Value = "Destino"
+                            .Cells(rowfija + 4, 1).Value = "Tipo transporte"
+                            .Cells(rowfija + 5, 1).Value = "Tiempo transito"
+                            .Cells(rowfija + 6, 1).Value = "Contenedor"
+
+                            .Cells(rowfija + 1, 2).Value = forms.proveedoreslcl(i)
+                            .Cells(rowfija + 2, 2).Value = forms.salida
+                            .Cells(rowfija + 3, 2).Value = forms.destino
+                            .Cells(rowfija + 4, 2).Value = "Aereo"
+                            .Cells(rowfija + 5, 2).Value = tiempo_transito
+                            .Cells(rowfija + 6, 2).Value = "ND"
+
+                            .Cells(rowfija + 1, 3).Value = "Tarifa minima ($)"
+                            .Cells(rowfija + 2, 3).Value = "Tarifa libra ($)"
+                            .Cells(rowfija + 3, 3).Value = "Tarifa volumen ($)"
+                            .Cells(rowfija + 4, 3).Value = "BL + manejo ($)"
+                            .Cells(rowfija + 5, 3).Value = "Cargada ($)"
+                            .Cells(rowfija + 6, 3).Value = "THC ($)"
+
+                            .Cells(rowfija + 1, 4).Value = tarifa_minima
+                            .Cells(rowfija + 2, 4).Value = tarifa_libra
+                            .Cells(rowfija + 3, 4).Value = tarifa_pie
+                            .Cells(rowfija + 4, 4).Value = manejo
+                            .Cells(rowfija + 5, 4).Value = 0
+                            .Cells(rowfija + 6, 4).Value = thc
+
+                            .Cells(rowfija + 1, 5).Value = "Flete libras ($)"
+                            .Cells(rowfija + 2, 5).Value = "Flete volumen ($)"
+                            .Cells(rowfija + 3, 5).Value = "Flete utilizado ($)"
+                            .Cells(rowfija + 4, 5).Value = "Sobre estadia ($)"
+                            .Cells(rowfija + 5, 5).Value = "SED ($)"
+                            .Cells(rowfija + 6, 5).Value = "Otros cargos ($)"
+
+                            .Cells(rowfija + 1, 6).Formula = "=" & .Cells(rowtotales1, 11).Address(False, False) & "*" & .Cells(rowfija + 2, 4).Address(False, False)
+                            .Cells(rowfija + 2, 6).Formula = "=" & .Cells(rowtotales1, 10).Address(False, False) & "*" & .Cells(rowfija + 3, 4).Address(False, False)
+                            .Cells(rowfija + 3, 6).Formula = "=MAX(" & .Cells(rowfija + 1, 6).Address(False, False) & "," & .Cells(rowfija + 2, 6).Address(False, False) & "," & .Cells(rowfija + 1, 4).Address(False, False) & ")"
+
+                            .Cells(rowfija + 4, 6).Formula = sobrestadia
+                            .Cells(rowfija + 5, 6).Formula = sed
+                            .Cells(rowfija + 6, 6).Formula = forms.costonoclasificados
+
+                            .Cells(rowfija + 1, 7).Value = "Seguro minimo ($)"
+                            .Cells(rowfija + 2, 7).Value = "% Seguro ($)"
+                            .Cells(rowfija + 3, 7).Value = "Seguro ($)"
+                            .Cells(rowfija + 4, 7).Value = "Dias libres ($)"
+                            .Cells(rowfija + 5, 7).Value = "Salidas ($)"
+                            .Cells(rowfija + 6, 7).Value = "Flete total ($)"
+
+                            .Cells(rowfija + 1, 8).Value = seguro_minimo
+                            .Cells(rowfija + 2, 8).Value = porcentaje_seguro
+                            .Cells(rowfija + 3, 8).Formula = "=MAX((" & .Cells(rowfija + 2, 8).Address(False, False) & "*" & .Cells(rowtotales1, 12).Address(False, False) & "/100)," & .Cells(rowfija + 1, 8).Address(False, False) & ")"
+                            .Cells(rowfija + 4, 8).Value = dias_libres
+                            .Cells(rowfija + 5, 8).Value = dias_salida
+                            .Cells(rowfija + 6, 8).Formula = "=" & .Cells(rowfija + 4, 4).Address & "+" & .Cells(rowfija + 5, 4).Address(False, False) & "+" & .Cells(rowfija + 6, 4).Address(False, False) & "+" & .Cells(rowfija + 3, 6).Address(False, False) _
+                            & "+" & .Cells(rowfija + 4, 6).Address(False, False) & "+" & .Cells(rowfija + 5, 6).Address(False, False) & "+" & .Cells(rowfija + 6, 6).Address(False, False) & "+" & .Cells(rowfija + 3, 8).Address(False, False)
+
+                            .Cells(rowfija + 1, 9).Value = "CIF ($)"
+                            .Cells(rowfija + 1, 10).Formula = "=" & .Cells(rowtotales2, 6).Address(False, False) & "+" & .Cells(rowtotales1, 12).Address(False, False) & "+" & .Cells(rowfija + 6, 8).Address(False, False)
+
+                            rowactual = rowfija + 8
+                            .Cells(rowactual, 1).Value = "Informacion arancelaria"
+                            .Cells(rowactual + 1, 1).Value = "Partida"
+                            .Cells(rowactual + 1, 2).Value = "Categoria"
+                            .Cells(rowactual + 1, 3).Value = "Descripcion"
+                            .Cells(rowactual + 1, 4).Value = "CIF ($)"
+                            .Cells(rowactual + 1, 5).Value = "DAI ($)"
+                            .Cells(rowactual + 1, 6).Value = "Selectivo ($)"
+                            .Cells(rowactual + 1, 7).Value = "ISV ($)"
+                            .Cells(rowactual + 1, 8).Value = "Total ($)"
+                            rowactual = rowactual + 2
+                            End With
+                            End If
+                            rowstart5 = rowactual - 2
+                            
+                            For p = 0 To UBound(array_productos)
+                                cif_temporal = array_productos(p)(8) / venta_total * gastos_previos + array_productos(p)(8)
+                                dai_temporal = cif_temporal * (1 + aranceles_producto(p)(8) / 100)
+                                selectivo_temporal = cif_temporal * (1 + aranceles_producto(p)(5) / 100)
+                                isv_temporal = selectivo * (1 + aranceles_producto(p)(6) / 100)
+                                dai_total = dai_total + dai_temporal - cif_temporal
+                                selectivo_total = selectivo_total + selectivo_temporal
+                                isv_total = isv_total + isv_temporal
+                                precio_temporal = cif_temporal * (1 + aranceles_producto(p)(8) / 100) * (1 + aranceles_producto(p)(5) / 100) * (1 + aranceles_producto(p)(6) / 100)
+                                impuesto_total = impuesto_total + (precio_temporal - cif_temporal)
+                                If UserForm2.CheckBox8.Value = True Then
+                                With newwb.Sheets(sheet_number)
+                                .Cells(rowactual, 1).Formula = "=" & .Cells(14 + p, 1).Address(False, False)
+                                .Cells(rowactual, 2).Formula = "=" & .Cells(14 + p, 2).Address(False, False)
+                                .Cells(rowactual, 3).Formula = "=" & .Cells(14 + p, 3).Address(False, False)
+                                .Cells(rowactual, 4).Formula = "=" & .Cells(14 + p, 12).Address(False, False) & "/" & .Cells(rowtotales1, 12).Address(False, False) & "*(" & .Cells(rowfija + 1, 10).Address(False, False) & "-" & .Cells(rowtotales1, 12).Address(False, False) & ")+" & .Cells(14 + p, 12).Address(False, False)
+                                .Cells(rowactual, 5).Formula = "=" & .Cells(rowactual, 4).Address & "/100*" & .Cells(14 + p, 13).Address(False, False)
+                                .Cells(rowactual, 6).Formula = "=(" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & ")/100*" & .Cells(14 + p, 14).Address(False, False)
+                                .Cells(rowactual, 7).Formula = "=(" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & "+" & .Cells(rowactual, 6).Address(False, False) & ")/100*" & .Cells(14 + p, 15).Address(False, False)
+                                .Cells(rowactual, 8).Formula = "=" & .Cells(rowactual, 4).Address(False, False) & "+" & .Cells(rowactual, 5).Address(False, False) & "+" & .Cells(rowactual, 6).Address(False, False) & "+" & .Cells(rowactual, 7).Address(False, False)
+                                End With
+                                End If
+                                rowactual = rowactual + 1
+
+                            Next p
+                            
+                            rowfinal5 = rowactual
+                            
+                            If UserForm2.CheckBox8.Value = True Then
+                            With newwb.Sheets(sheet_number)
+                            .Cells(rowactual, 8).Formula = "=sum(" & .Cells(rowactual - 1, 8).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 8).Address(False, False) & ")"
+                            .Cells(rowactual, 7).Formula = "=sum(" & .Cells(rowactual - 1, 7).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 7).Address(False, False) & ")"
+                            .Cells(rowactual, 6).Formula = "=sum(" & .Cells(rowactual - 1, 6).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 6).Address(False, False) & ")"
+                            .Cells(rowactual, 5).Formula = "=sum(" & .Cells(rowactual - 1, 5).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 5).Address(False, False) & ")"
+                            .Cells(rowactual, 4).Formula = "=sum(" & .Cells(rowactual - 1, 4).Address(False, False) & ":" & .Cells(rowactual - UBound(array_productos) - 1, 4).Address(False, False) & ")"
+
+                            rowtotales4 = rowactual
+
+                            rowactual = rowactual + 2
+                            
+                            rowstart6 = rowactual
+                            rowfinal6 = rowactual + 4
+                            
+                            rowstart6 = rowactual
+                            rowfinal6 = rowactual + 4
+                            .Cells(rowactual, 1).Value = "Gastos de aduana"
+                            .Cells(rowactual + 1, 1).Value = "Agente aduanero"
+                            .Cells(rowactual + 2, 1).Value = "Porcentaje sobre CIF"
+                            .Cells(rowactual + 3, 1).Value = "Honorarios sobre CIF"
+                            .Cells(rowactual + 4, 1).Value = "Tarifa fija ($)"
+
+                            .Cells(rowactual + 1, 2).Value = forms.aduaneros(y)
+                            .Cells(rowactual + 2, 2).Value = porcentaje_cif
+                            .Cells(rowactual + 3, 2).Formula = "=" & .Cells(rowfija + 1, 10).Address(False, False) & "*" & .Cells(rowactual + 2, 2).Address(False, False) & "/100"
+                            .Cells(rowactual + 4, 2).Value = tarifa_tramite
+
+                            .Cells(rowactual + 1, 3).Value = "DUA ($)"
+                            .Cells(rowactual + 2, 3).Value = "DVA ($)"
+                            .Cells(rowactual + 3, 3).Value = "STD ($)"
+                            .Cells(rowactual + 4, 3).Value = "Total ($)"
+
+                            .Cells(rowactual + 1, 4).Value = dua
+                            .Cells(rowactual + 2, 4).Value = dva * forms.cantfacturas
+                            .Cells(rowactual + 3, 4).Value = std
+                            .Cells(rowactual + 4, 4).Formula = "=" & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False) & "+" & .Cells(rowactual + 2, 4).Address(False, False) & "+" & .Cells(rowactual + 3, 4).Address(False, False)
+
+                            rowtotales5 = rowactual + 4
+
+
+                            
+
+                            rowactual = rowactual + 6
+                            
+                            rowstart7 = rowactual
+                            rowfinal7 = rowactual + 8
+                            
+                            .Cells(rowactual, 1).Value = "Resumen de gastos"
+
+                            .Cells(rowactual + 1, 1).Value = "Precio de compra ($)"
+                            .Cells(rowactual + 2, 1).Value = "Flete internacional ($)"
+                            .Cells(rowactual + 3, 1).Value = "Flete extranjero ($)"
+                            .Cells(rowactual + 4, 1).Value = "Flete nacional ($)"
+                            .Cells(rowactual + 5, 1).Value = "CIF ($)"
+                            .Cells(rowactual + 6, 1).Value = "DAI ($)"
+                            .Cells(rowactual + 7, 1).Value = "Selectivo ($)"
+                            .Cells(rowactual + 8, 1).Value = "ISV ($)"
+
+                            .Cells(rowactual + 1, 2).Formula = "=" & .Cells(rowtotales1, 12).Address(False, False)
+                            .Cells(rowactual + 2, 2).Formula = "=" & .Cells(rowfija + 6, 8).Address(False, False)
+                            .Cells(rowactual + 3, 2).Formula = "=" & .Cells(rowtotales2, 6).Address(False, False)
+                            .Cells(rowactual + 4, 2).Formula = "=" & .Cells(rowtotales3, 6).Address(False, False)
+                            .Cells(rowactual + 5, 2).Formula = "=" & .Cells(rowfija + 1, 10).Address(False, False)
+                            .Cells(rowactual + 6, 2).Value = "=" & .Cells(rowtotales4, 5).Address(False, False)
+                            .Cells(rowactual + 7, 2).Value = "=" & .Cells(rowtotales4, 6).Address(False, False)
+                            .Cells(rowactual + 8, 2).Value = "=" & .Cells(rowtotales4, 7).Address(False, False)
+
+                            .Cells(rowactual + 1, 3).Value = "Agente aduanero ($)"
+                            .Cells(rowactual + 2, 3).Value = "Flete (%)"
+                            .Cells(rowactual + 3, 3).Value = "DAI (%)"
+                            .Cells(rowactual + 4, 3).Value = "Selectivo (%)"
+                            .Cells(rowactual + 5, 3).Value = "ISV (%)"
+                            .Cells(rowactual + 6, 3).Value = "Costo (%)"
+                            .Cells(rowactual + 7, 3).Value = "Precio final ($)"
+
+                            .Cells(rowactual + 1, 4).Formula = "=" & .Cells(rowtotales5, 4).Address(False, False)
+                            .Cells(rowactual + 2, 4).Formula = "=" & .Cells(rowactual + 2, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 3, 4).Formula = "=" & .Cells(rowactual + 6, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 4, 4).Formula = "=" & .Cells(rowactual + 7, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 5, 4).Formula = "=" & .Cells(rowactual + 8, 2).Address(False, False) & "/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 6, 4).Formula = "=(" & .Cells(rowactual + 2, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & _
+                            .Cells(rowactual + 6, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False) & ")/" & .Cells(rowactual + 1, 2).Address(False, False) & "*" & 100
+                            .Cells(rowactual + 7, 4).Formula = "=" & .Cells(rowactual + 1, 2).Address(False, False) & "+" & .Cells(rowactual + 2, 2).Address(False, False) & "+" & .Cells(rowactual + 3, 2).Address(False, False) & "+" & .Cells(rowactual + 4, 2).Address(False, False) & "+" & _
+                            .Cells(rowactual + 6, 2).Address(False, False) & "+" & .Cells(rowactual + 7, 2).Address(False, False) & "+" & .Cells(rowactual + 8, 2).Address(False, False) & "+" & .Cells(rowactual + 1, 4).Address(False, False)
+                            End With
+                            End If
+                            precio_final = impuesto_total + cif + aduana_total + trans_externo
+                            With ActiveSheet
+                            
+                            .Cells(lastabsoluterow, 1).Value = lastrangerow
+                            .Cells(lastabsoluterow, 2).Value = Date
+                            .Cells(lastabsoluterow, 3).Value = forms.salida
+                            .Cells(lastabsoluterow, 4).Value = forms.destino
+                            .Cells(lastabsoluterow, 5).Value = "Aereo"
+                            .Cells(lastabsoluterow, 6).Value = forms.proveedoresaereo(i)
+                            .Cells(lastabsoluterow, 7).Value = "ND"
+                            .Cells(lastabsoluterow, 8).Value = "ND"
+                            .Cells(lastabsoluterow, 9).Value = forms.tipo1
+                            .Cells(lastabsoluterow, 10).Value = forms.tipo2
+                            .Cells(lastabsoluterow, 11).Value = forms.tipo3
+                            .Cells(lastabsoluterow, 12).Value = forms.tipo4
+                            .Cells(lastabsoluterow, 13).Value = forms.proveedorvehiculos1
+                            .Cells(lastabsoluterow, 14).Value = forms.proveedorvehiculos2
+                            .Cells(lastabsoluterow, 15).Value = forms.proveedorvehiculos3
+                            .Cells(lastabsoluterow, 16).Value = forms.proveedorvehiculos4
+                            .Cells(lastabsoluterow, 17).Value = forms.numerode1
+                            .Cells(lastabsoluterow, 18).Value = forms.numerode2
+                            .Cells(lastabsoluterow, 19).Value = forms.numerode3
+                            .Cells(lastabsoluterow, 20).Value = forms.numerode4
+                            .Cells(lastabsoluterow, 21).Value = forms.tipo11
+                            .Cells(lastabsoluterow, 22).Value = forms.tipo22
+                            .Cells(lastabsoluterow, 23).Value = forms.tipo33
+                            .Cells(lastabsoluterow, 24).Value = forms.tipo44
+                            .Cells(lastabsoluterow, 25).Value = forms.proveedorvehiculos11
+                            .Cells(lastabsoluterow, 26).Value = forms.proveedorvehiculos22
+                            .Cells(lastabsoluterow, 27).Value = forms.proveedorvehiculos33
+                            .Cells(lastabsoluterow, 28).Value = forms.proveedorvehiculos44
+                            .Cells(lastabsoluterow, 29).Value = forms.numerode11
+                            .Cells(lastabsoluterow, 30).Value = forms.numerode22
+                            .Cells(lastabsoluterow, 31).Value = forms.numerode33
+                            .Cells(lastabsoluterow, 32).Value = forms.numerode44
+                            .Cells(lastabsoluterow, 33).Value = working_string_publica
+                            .Cells(lastabsoluterow, 34).Value = forms.cantfacturas
+                            .Cells(lastabsoluterow, 35).Value = forms.diaspuerto
+                            .Cells(lastabsoluterow, 36).Value = forms.costonoclasificados
+                            .Cells(lastabsoluterow, 37).Value = forms.aduaneros(y)
+                            .Cells(lastabsoluterow, 38).Value = venta_total
+                            .Cells(lastabsoluterow, 39).Value = flete
+                            .Cells(lastabsoluterow, 40).Value = trans_externo
+                            .Cells(lastabsoluterow, 41).Value = trans_interno
+                            .Cells(lastabsoluterow, 42).Value = aduanatotal
+                            .Cells(lastabsoluterow, 43).Value = tiempo_transito
+                            .Cells(lastabsoluterow, 44).Value = dias_salida
+                            .Cells(lastabsoluterow, 45).Value = impuesto_total
+                            .Cells(lastabsoluterow, 46).Value = (flete + trans_externo + trans_interno) / venta_total * 100
+                            .Cells(lastabsoluterow, 47).Value = aduanatotal / venta_total * 100
+                            .Cells(lastabsoluterow, 48).Value = impuesto_total / venta_total * 100
+                            .Cells(lastabsoluterow, 49).Value = (flete + trans_externo + trans_interno + dai_total + aduanatotal) / venta_total * 100
+                            .Cells(lastabsoluterow, 50).Value = precio_final
+                            .Cells(lastabsoluterow, 51).Value = units
+                            End With
+                            'Contador para la ultima fila
+                            Call formatting(newwb, sheet_number, rowstart1, rowfinal1, rowstart2, rowfinal2, rowstart3, rowfinal3, rowstart4, rowfinal4, rowstart5, rowfinal5, rowstart6, rowfinal6, rowstart7, rowfinal7)
+                            sheet_number = sheet_number + 1
+                            lastrangerow = lastrangerow + 1
+                            lastabsoluterow = lastabsoluterow + 1
+                        End With
+                    End If
+                Next j
+            Next y
+        Next i
+    End If
+End Sub
+
+Sub formatting(wb As Workbook, sheetnumber As Variant, start1 As Variant, end1 As Variant, start2 As Variant, end2 As Variant, start3 As Variant, end3 As Variant, start4 As Variant, end4 As Variant, start5 As Variant, end5 As Variant, start6 As Variant, end6 As Variant, start7 As Variant, end7 As Variant)
+
+
+    
+    With wb.Worksheets(sheetnumber)
+        .Activate
+        .Cells.EntireColumn.AutoFit
+        .Range(.Cells(start1, 1), .Cells(end1, 15)).Borders.LineStyle = xlContinuous
+        .Range(.Cells(start2, 1), .Cells(end2, 6)).Borders.LineStyle = xlContinuous
+        .Range(.Cells(start3, 1), .Cells(end3, 6)).Borders.LineStyle = xlContinuous
+        .Range(.Cells(start4, 1), .Cells(end4, 10)).Borders.LineStyle = xlContinuous
+        .Range(.Cells(start5, 1), .Cells(end5, 8)).Borders.LineStyle = xlContinuous
+        .Range(.Cells(start6, 1), .Cells(end6, 4)).Borders.LineStyle = xlContinuous
+        .Range(.Cells(start7, 1), .Cells(end7, 4)).Borders.LineStyle = xlContinuous
+        
+        .Range(.Cells(start1, 1), .Cells(start1, 15)).Font.Bold = True
+        .Range(.Cells(start2, 1), .Cells(start2, 6)).Font.Bold = True
+        .Range(.Cells(start3, 1), .Cells(start3, 6)).Font.Bold = True
+        .Range(.Cells(start4, 1), .Cells(start4, 10)).Font.Bold = True
+        .Range(.Cells(start5, 1), .Cells(start5, 8)).Font.Bold = True
+        .Range(.Cells(start6, 1), .Cells(start6, 4)).Font.Bold = True
+        .Range(.Cells(start7, 1), .Cells(start7, 4)).Font.Bold = True
+        
+        .Range(.Cells(start1 + 1, 1), .Cells(start1 + 1, 15)).Font.Bold = True
+        .Range(.Cells(start2 + 1, 1), .Cells(start2 + 1, 6)).Font.Bold = True
+        .Range(.Cells(start3 + 1, 1), .Cells(start3 + 1, 6)).Font.Bold = True
+        .Range(.Cells(start5 + 1, 1), .Cells(start5 + 1, 8)).Font.Bold = True
+        
+        .Range(.Cells(start1 + 1, 1), .Cells(start1 + 1, 15)).Interior.Color = RGB(231, 230, 230)
+        .Range(.Cells(start2 + 1, 1), .Cells(start2 + 1, 6)).Interior.Color = RGB(231, 230, 230)
+        .Range(.Cells(start3 + 1, 1), .Cells(start3 + 1, 6)).Interior.Color = RGB(231, 230, 230)
+        .Range(.Cells(start5 + 1, 1), .Cells(start5 + 1, 8)).Interior.Color = RGB(231, 230, 230)
+        
+        .Range(.Cells(end1, 1), .Cells(end1, 15)).Interior.Color = RGB(252, 228, 214)
+        .Range(.Cells(end2, 1), .Cells(end2, 6)).Interior.Color = RGB(252, 228, 214)
+        .Range(.Cells(end3, 1), .Cells(end3, 6)).Interior.Color = RGB(252, 228, 214)
+        .Range(.Cells(end5, 1), .Cells(end5, 8)).Interior.Color = RGB(252, 228, 214)
+        .Range(.Cells(end7 - 1, 3), .Cells(end7 - 1, 4)).Interior.Color = RGB(252, 228, 214)
+        
+        .Range(.Cells(end1, 1), .Cells(end1, 15)).Font.Bold = True
+        .Range(.Cells(end2, 1), .Cells(end2, 6)).Font.Bold = True
+        .Range(.Cells(end3, 1), .Cells(end3, 6)).Font.Bold = True
+        .Range(.Cells(end5, 1), .Cells(end5, 8)).Font.Bold = True
+        .Range(.Cells(end7 - 1, 3), .Cells(end7 - 1, 4)).Font.Bold = True
+        
+        .Range(.Cells(start1, 1), .Cells(start1, 15)).Merge
+        .Range(.Cells(start2, 1), .Cells(start2, 6)).Merge
+        .Range(.Cells(start3, 1), .Cells(start3, 6)).Merge
+        .Range(.Cells(start4, 1), .Cells(start4, 10)).Merge
+        .Range(.Cells(start5, 1), .Cells(start5, 8)).Merge
+        .Range(.Cells(start6, 1), .Cells(start6, 4)).Merge
+        .Range(.Cells(start7, 1), .Cells(start7, 4)).Merge
+        
+        .Range(.Cells(start1, 1), .Cells(start1, 15)).Font.size = 16
+        .Range(.Cells(start2, 1), .Cells(start2, 6)).Font.size = 16
+        .Range(.Cells(start3, 1), .Cells(start3, 6)).Font.size = 16
+        .Range(.Cells(start4, 1), .Cells(start4, 10)).Font.size = 16
+        .Range(.Cells(start5, 1), .Cells(start5, 8)).Font.size = 16
+        .Range(.Cells(start6, 1), .Cells(start6, 4)).Font.size = 16
+        .Range(.Cells(start7, 1), .Cells(start7, 4)).Font.size = 16
+        
+        .Range(.Cells(start1, 1), .Cells(start1, 15)).Interior.Color = RGB(221, 235, 247)
+        .Range(.Cells(start2, 1), .Cells(start2, 6)).Interior.Color = RGB(221, 235, 247)
+        .Range(.Cells(start3, 1), .Cells(start3, 6)).Interior.Color = RGB(221, 235, 247)
+        .Range(.Cells(start4, 1), .Cells(start4, 10)).Interior.Color = RGB(221, 235, 247)
+        .Range(.Cells(start5, 1), .Cells(start5, 8)).Interior.Color = RGB(221, 235, 247)
+        .Range(.Cells(start6, 1), .Cells(start6, 4)).Interior.Color = RGB(221, 235, 247)
+        .Range(.Cells(start7, 1), .Cells(start7, 4)).Interior.Color = RGB(221, 235, 247)
+        
+        
+        
+    End With
+    
+End Sub
+
+
